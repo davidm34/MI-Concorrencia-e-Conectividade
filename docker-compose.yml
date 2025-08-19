@@ -9,6 +9,5 @@ services:
 
   client:
     build: ./client
-    container_name: go_client
     depends_on:
       - server

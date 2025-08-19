@@ -1,49 +1,44 @@
 package main
 
 import (
-	"encoding/json"
+	"bufio"
 	"fmt"
-	"io"
-	"log"
-	"net/http"
-	"time"
+	"net"
+	"os"
 )
 
-type Response struct {
-	Message   string    `json:"message"`
-	Timestamp time.Time `json:"timestamp"`
-}
-
 func main() {
+	// Conecta ao servidor na porta 8080
+	conn, err := net.Dial("tcp", "server:8080")
+	if err != nil {
+		fmt.Println("Erro ao conectar:", err)
+		return
+	}
+	defer conn.Close()
+
+	fmt.Println("Conectado ao servidor!")
+
+	reader := bufio.NewReader(os.Stdin)
+	serverReader := bufio.NewReader(conn)
+
 	for {
-		start := time.Now()
+		// Lê entrada do usuário
+		fmt.Print("Digite uma mensagem: ")
+		text, _ := reader.ReadString('\n')
 
-		resp, err := http.Get("http://server:8080/ping")
+		// Envia para o servidor
+		_, err := conn.Write([]byte(text))
 		if err != nil {
-			log.Println("Erro ao conectar no servidor:", err)
-			time.Sleep(5 * time.Second)
-			continue
+			fmt.Println("Erro ao enviar:", err)
+			return
 		}
 
-		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		
-		var data Response
-		if err := json.Unmarshal(body, &data); err != nil {
-			log.Println("Erro ao decodificar resposta:", err)
-			time.Sleep(5 * time.Second)
-			continue
+		// Recebe resposta do servidor
+		message, err := serverReader.ReadString('\n')
+		if err != nil {
+			fmt.Println("Servidor desconectado.")
+			return
 		}
-
-		rtt := time.Since(start)
-
-		fmt.Printf(
-			"Mensagem: %s | Servidor recebeu em: %s | RTT: %v\n",
-			data.Message,
-			data.Timestamp.Format(time.RFC3339Nano),
-			rtt,
-		)
-
-		time.Sleep(5 * time.Second)
+		fmt.Print("Resposta do servidor: " + message)
 	}
 }
