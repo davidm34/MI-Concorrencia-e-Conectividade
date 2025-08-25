@@ -5,86 +5,53 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"sync"
 )
 
-var manager = NewPlayerManager()
+var manager = NewPlayerManager("players.json")
 
-type Player struct {
-    ID     int
-    Name   string
-    Conn   net.Conn
-    Status string // ex: "livre", "em_duelo"
+func Login(conn net.Conn, name string){
+	fmt.Print("Login Realizado com Sucesso! \n")
+	reader := bufio.NewReader(conn)
+	for {
+		message, err := reader.ReadString('\n')
+		if err != nil {
+			fmt.Println("Jogador saiu:", name)
+			return
+		}
+	fmt.Printf("[%s]: %s", name, message)
+	conn.Write([]byte("Servidor recebeu: " + message))
+	}	
 }
-
-
-type PlayerManager struct {
-    players map[int]*Player
-	mu 		sync.Mutex
-    nextID  int
-}
-
-func NewPlayerManager() *PlayerManager {
-    return &PlayerManager{
-        players: make(map[int]*Player),
-        nextID:  1,
-    }
-}
-
-func (pm *PlayerManager) AddPlayer(conn net.Conn, name string) *Player {    
-    pm.mu.Lock()
-    defer pm.mu.Unlock()
-
-    player := &Player{
-        ID:     pm.nextID,
-        Name:   name,
-        Conn:   conn,
-        Status: "livre",
-    }
-
-    pm.players[player.ID] = player
-    pm.nextID++
-
-    return player
-}
-
-func (pm *PlayerManager) RemovePlayer(id int) {
-    pm.mu.Lock()
-    defer pm.mu.Unlock()
-    delete(pm.players, id)
-}
-
-func (pm *PlayerManager) ListPlayers() []*Player {
-    pm.mu.Lock()
-    defer pm.mu.Unlock()
-
-    list := []*Player{}
-    for _, p := range pm.players {
-        list = append(list, p)
-    }
-    return list
-}
-
 
 func handleConnection(conn net.Conn) {
+    var login int
+	var name, password string
     defer conn.Close()
 
-    // cria novo jogador (nome temporário com ID gerado pelo manager)
-    player := manager.AddPlayer(conn, fmt.Sprintf("Jogador%d", manager.nextID))
-    fmt.Println("Novo jogador conectado:", player.Name, player.Conn.RemoteAddr())
+	
+    fmt.Print("[0] Digite se deseja fazer Login\n[1] Digite se deseja fazer cadastro: \n")
+    fmt.Scan(&login)
+	fmt.Print("Digite seu nome: \n")
+	fmt.Scan(&name) 
+	fmt.Print("Digite sua senha: \n")
+	fmt.Scan(&password) 
+	if (login == 0){		
+		var add_player bool = manager.Verify_Login(name, password)
+		if (add_player) {
+			Login(conn, name)
+		} else {
+			fmt.Print("Usuário não encontrado! \n")
+			
+		}
+	} else {
+		player, err := manager.AddPlayer(conn, name, password)
+		if err != nil {
+			fmt.Print("Erro ao fazer cadastro")
+		}
+		Login(conn, player.Name)
+	}
 
-    reader := bufio.NewReader(conn)
-    for {
-        message, err := reader.ReadString('\n')
-        if err != nil {
-            fmt.Println("Jogador saiu:", player.Name)
-            manager.RemovePlayer(player.ID)
-            return
-        }
-
-        fmt.Printf("[%s]: %s", player.Name, message)
-        conn.Write([]byte("Servidor recebeu: " + message))
-    }
+   
 }
 
 
