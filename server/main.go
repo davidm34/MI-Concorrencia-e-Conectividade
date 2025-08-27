@@ -5,53 +5,126 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"io"
+	"strings"
 )
 
 var manager = NewPlayerManager("players.json")
+var rooms = NewRoomManager()
 
-func Login(conn net.Conn, name string){
-	fmt.Print("Login Realizado com Sucesso! \n")
-	reader := bufio.NewReader(conn)
-	for {
-		message, err := reader.ReadString('\n')
-		if err != nil {
-			fmt.Println("Jogador saiu:", name)
-			return
+
+func ReadPlayer(conn net.Conn, reader *bufio.Reader) (string, error) {
+	message, err := reader.ReadString('\n')
+	if err != nil {
+		if err == io.EOF {
+			fmt.Println("Jogador desconectou.")
+		} else {
+			fmt.Println("Erro ao ler do cliente:", err)
 		}
-	fmt.Printf("[%s]: %s", name, message)
-	conn.Write([]byte("Servidor recebeu: " + message))
-	}	
+		return "", err
+	}
+
+	message = strings.TrimSpace(message) // Remove '\n' e espaços extras
+	if message != "" {
+		_, err = conn.Write([]byte("Servidor recebeu: " + message + "\n"))
+		if err != nil {
+			fmt.Println("Erro ao enviar para o cliente:", err)
+			return "", err
+		}
+	}
+	return message, nil
 }
 
 func handleConnection(conn net.Conn) {
-    var login int
-	var name, password string
     defer conn.Close()
+    reader := bufio.NewReader(conn)
 
-	
-    fmt.Print("[0] Digite se deseja fazer Login\n[1] Digite se deseja fazer cadastro: \n")
-    fmt.Scan(&login)
-	fmt.Print("Digite seu nome: \n")
-	fmt.Scan(&name) 
-	fmt.Print("Digite sua senha: \n")
-	fmt.Scan(&password) 
-	if (login == 0){		
-		var add_player bool = manager.Verify_Login(name, password)
-		if (add_player) {
-			Login(conn, name)
-		} else {
-			fmt.Print("Usuário não encontrado! \n")
-			
-		}
-	} else {
-		player, err := manager.AddPlayer(conn, name, password)
-		if err != nil {
-			fmt.Print("Erro ao fazer cadastro")
-		}
-		Login(conn, player.Name)
-	}
+    // Lê o tipo de operação (login ou cadastro)
+    login, err := ReadPlayer(conn, reader)
+    if err != nil {
+        fmt.Printf("Erro ao ler operação: %v\n", err)
+        return
+    }
 
-   
+    var player *Player
+    var room *Room
+
+    switch login {
+    case "0": // Login
+        name, err := ReadPlayer(conn, reader)
+        if err != nil {
+            fmt.Printf("Erro ao ler nome: %v\n", err)
+            return
+        }
+        password, err := ReadPlayer(conn, reader)
+        if err != nil {
+            fmt.Printf("Erro ao ler senha: %v\n", err)
+            return
+        }
+
+        ok, err := manager.Verify_Login(name, password)
+        if err != nil {
+            conn.Write([]byte("Erro no login.\n"))
+            fmt.Printf("Erro no login de %s: %v\n", name, err)
+            return
+        }
+        
+        if ok {
+            conn.Write([]byte("Login realizado com sucesso.\n"))            
+            fmt.Printf("Jogador %s logou.\n", name)
+
+            // Atualiza conexão do jogador
+            player, err = manager.GetPlayer(name)
+            if err != nil {
+                conn.Write([]byte("Erro ao carregar jogador.\n"))
+                fmt.Printf("Erro ao carregar jogador %s: %v\n", name, err)
+                return
+            }
+            
+            player.Conn = conn  // Atualiza conexão
+            room = rooms.AddPlayerRoom(player)
+            
+        } else {
+            conn.Write([]byte("Login falhou.\n"))
+            fmt.Printf("Login falhou para %s\n", name)
+            return
+        }
+
+    case "1": // Cadastro
+        name, err := ReadPlayer(conn, reader)
+        if err != nil {
+            fmt.Printf("Erro ao ler nome (cadastro): %v\n", err)
+            return
+        }
+        password, err := ReadPlayer(conn, reader)
+        if err != nil {
+            fmt.Printf("Erro ao ler senha (cadastro): %v\n", err)
+            return
+        }
+
+        player, err = manager.AddPlayer(conn, name, password)
+        if err != nil {
+            conn.Write([]byte("Erro no cadastro.\n"))
+            fmt.Printf("Erro no cadastro de %s: %v\n", name, err)
+            return
+        }
+        
+        conn.Write([]byte("Cadastro realizado com sucesso.\n"))
+        room = rooms.AddPlayerRoom(player)
+
+    default:
+        conn.Write([]byte("Opção inválida. Digite 0 ou 1.\n"))
+        fmt.Printf("Opção inválida recebida: %s\n", login)
+        return
+    }
+
+    // Se chegou aqui, o jogador foi autenticado com sucesso
+    // Agora inicia o loop principal do jogador
+    fmt.Printf("Iniciando HandlePlayer para %s\n", player.Name)
+    HandlePlayer(player, room)
+    
+    // NOTA: Não usar go HandlePlayer() - queremos que esta goroutine
+    // continue executando o HandlePlayer até o jogador sair
 }
 
 

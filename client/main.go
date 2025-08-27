@@ -7,8 +7,9 @@ import (
 	"os"
 )
 
+
+
 func main() {
-	// Conecta ao servidor na porta 8080
 	conn, err := net.Dial("tcp", "server:8080")
 	if err != nil {
 		fmt.Println("Erro ao conectar:", err)
@@ -21,24 +22,41 @@ func main() {
 	reader := bufio.NewReader(os.Stdin)
 	serverReader := bufio.NewReader(conn)
 
+	// --- LOGIN / CADASTRO ---
+	fmt.Print("[0] Login\n[1] Cadastro\nEscolha: ")
+	option, _ := reader.ReadString('\n')
+	conn.Write([]byte(option))
+
+	fmt.Print("Digite seu nome: ")
+	name, _ := reader.ReadString('\n')
+	conn.Write([]byte(name))
+
+	fmt.Print("Digite sua senha: ")
+	pass, _ := reader.ReadString('\n')
+	conn.Write([]byte(pass))
+
+	// recebe resposta do servidor
+	response, _ := serverReader.ReadString('\n')
+	fmt.Print(response)
+
+	// --- SE ENTRAR NA SALA ---
+	fmt.Println("Agora você está em uma sala! Digite mensagens:")
+
+	// goroutine para ouvir servidor
+	go func() {
+		for {
+			msg, err := serverReader.ReadString('\n')
+			if err != nil {
+				fmt.Println("Servidor desconectado.")
+				os.Exit(0)
+			}
+			fmt.Print(msg)
+		}
+	}()
+
+	// loop para enviar mensagens
 	for {
-		// Lê entrada do usuário
-		fmt.Print("Digite uma mensagem: ")
 		text, _ := reader.ReadString('\n')
-
-		// Envia para o servidor
-		_, err := conn.Write([]byte(text))
-		if err != nil {
-			fmt.Println("Erro ao enviar:", err)
-			return
-		}
-
-		// Recebe resposta do servidor
-		message, err := serverReader.ReadString('\n')
-		if err != nil {
-			fmt.Println("Servidor desconectado.")
-			return
-		}
-		fmt.Print("Resposta do servidor: " + message)
+		conn.Write([]byte(text))
 	}
 }
