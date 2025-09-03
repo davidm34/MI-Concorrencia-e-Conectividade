@@ -90,6 +90,8 @@ func handleConnection(conn net.Conn) {
             return
         }
 
+        go HandlePlayer(player, room)
+
     case "1": // Cadastro
         name, err := ReadPlayer(conn, reader)
         if err != nil {
@@ -118,13 +120,9 @@ func handleConnection(conn net.Conn) {
         return
     }
 
-    // Se chegou aqui, o jogador foi autenticado com sucesso
-    // Agora inicia o loop principal do jogador
     fmt.Printf("Iniciando HandlePlayer para %s\n", player.Name)
-    HandlePlayer(player, room)
-    
-    // NOTA: Não usar go HandlePlayer() - queremos que esta goroutine
-    // continue executando o HandlePlayer até o jogador sair
+    go HandlePlayer(player, room)
+
 }
 
 

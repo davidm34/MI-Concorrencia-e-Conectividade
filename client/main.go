@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 )
 
 
@@ -37,26 +38,19 @@ func main() {
 
 	// recebe resposta do servidor
 	response, _ := serverReader.ReadString('\n')
-	fmt.Print(response)
+	fmt.Println(response)
 
-	// --- SE ENTRAR NA SALA ---
-	fmt.Println("Agora você está em uma sala! Digite mensagens:")
+	// --- AGORA ESCUTA O SERVIDOR PARA SABER QUANDO MOSTRAR O MENU ---
 
-	// goroutine para ouvir servidor
-	go func() {
-		for {
-			msg, err := serverReader.ReadString('\n')
-			if err != nil {
-				fmt.Println("Servidor desconectado.")
-				os.Exit(0)
-			}
-			fmt.Print(msg)
-		}
-	}()
-
-	// loop para enviar mensagens
+	// Loop principal para enviar mensagens APÓS o menu aparecer
 	for {
+		// Lê do terminal local
 		text, _ := reader.ReadString('\n')
-		conn.Write([]byte(text))
+		text = strings.TrimSpace(text)
+		
+		// Envia para o servidor
+		conn.Write([]byte(text + "\n"))
 	}
+
+
 }

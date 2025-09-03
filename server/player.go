@@ -25,6 +25,7 @@ type Card struct {
 	Name   string `json:"name"`
 	Damage int    `json:"damage"`
 	Rarity string `json:"rarity"`
+	UsedDuel bool `json:"usedDuel"`
 }
 
 type PlayerManager struct {
@@ -116,6 +117,7 @@ func (pm *PlayerManager) AddPlayer(conn net.Conn, name string, password string) 
 	playersData = append(playersData, newPlayerData)
 
 	if err := pm.writePlayerData(playersData); err != nil {
+		fmt.Print("\nDeu erro aqui")
 		return nil, fmt.Errorf("erro ao salvar jogadores: %w", err)
 	}
 
@@ -129,7 +131,7 @@ func (pm *PlayerManager) AddPlayer(conn net.Conn, name string, password string) 
 	return newPlayer, nil
 }
 
-// Listar jogadores (retorna PlayerData)
+
 func (pm *PlayerManager) ListPlayers() ([]PlayerData, error) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
