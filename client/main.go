@@ -9,7 +9,6 @@ import (
 )
 
 
-
 func main() {
 	conn, err := net.Dial("tcp", "server:8080")
 	if err != nil {
@@ -21,26 +20,15 @@ func main() {
 	fmt.Println("Conectado ao servidor!")
 
 	reader := bufio.NewReader(os.Stdin)
-	serverReader := bufio.NewReader(conn)
-
-	// --- LOGIN / CADASTRO ---
-	fmt.Print("[0] Login\n[1] Cadastro\nEscolha: ")
-	option, _ := reader.ReadString('\n')
-	conn.Write([]byte(option))
+	// serverReader := bufio.NewReader(conn)
 
 	fmt.Print("Digite seu nome: ")
 	name, _ := reader.ReadString('\n')
 	conn.Write([]byte(name))
 
-	fmt.Print("Digite sua senha: ")
-	pass, _ := reader.ReadString('\n')
-	conn.Write([]byte(pass))
+	
 
-	// recebe resposta do servidor
-	response, _ := serverReader.ReadString('\n')
-	fmt.Println(response)
 
-	// --- AGORA ESCUTA O SERVIDOR PARA SABER QUANDO MOSTRAR O MENU ---
 
 	// Loop principal para enviar mensagens APÓS o menu aparecer
 	for {
@@ -54,3 +42,22 @@ func main() {
 
 
 }
+
+
+// // Loop de leitura (escuta mensagens do cliente)
+// func (conn net.Conn) readerLoop() {
+// 	reader := bufio.NewReader(conn)
+
+// 	for {
+// 		msg, err := reader.ReadString('\n')
+// 		if err != nil {
+// 			fmt.Printf("Cliente %s desconectado: %v\n", err) 
+// 			conn.Close()
+// 			return
+// 		}
+// 		msg = strings.TrimSpace(msg)
+// 		fmt.Printf("[RECV] %s: %s\n")
+
+// 		// aqui você pode repassar a mensagem para a lógica do jogo/sala
+// 	}
+// }

@@ -1,207 +1,100 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"net"
-	"os"
 	"sync"
 )
 
-type PlayerData struct {
-	ID       int    `json:"id"`
-	Name     string `json:"name"`
-	Password string `json:"password"`
-	Duel     bool   `json:"duel"`
-	Cards    []Card `json:"cards"`
+type Card struct {
+	Name   string
+	Damage int
+	Rarity string
 }
 
 type Player struct {
-	PlayerData
-	Conn net.Conn `json:"-"`
-}
-
-type Card struct {
-	Name   string `json:"name"`
-	Damage int    `json:"damage"`
-	Rarity string `json:"rarity"`
-	UsedDuel bool `json:"usedDuel"`
+	ID       int
+	Name     string
+	Conn     net.Conn
+	Duel     bool
+	Cards    []Card
 }
 
 type PlayerManager struct {
-	mu   sync.Mutex
-	file string
+	mu      sync.Mutex
+	players []Player
 }
 
-func NewPlayerManager(file string) *PlayerManager {
-	// Garante que o arquivo existe e é válido
-	pm := &PlayerManager{file: file}
-	pm.ensureFileExists()
-	return pm
-}
-
-func (pm *PlayerManager) ensureFileExists() {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-	
-	if _, err := os.Stat(pm.file); os.IsNotExist(err) {
-		// Cria arquivo com array vazio
-		emptyData := []PlayerData{}
-		pm.writePlayerData(emptyData)
+func NewPlayerManager() *PlayerManager {
+	return &PlayerManager{
+		players: []Player{},
 	}
-}
-
-func (pm *PlayerManager) readPlayerData() ([]PlayerData, error) {
-	file, err := os.ReadFile(pm.file)
-	if err != nil {
-		return nil, fmt.Errorf("erro ao ler arquivo: %w", err)
-	}
-	
-	// Verifica se o arquivo está vazio
-	if len(file) == 0 {
-		return []PlayerData{}, nil
-	}
-	
-	var players []PlayerData
-	if err := json.Unmarshal(file, &players); err != nil {
-		return nil, fmt.Errorf("erro ao decodificar JSON: %w", err)
-	}
-	return players, nil
-}
-
-func (pm *PlayerManager) writePlayerData(players []PlayerData) error {
-	data, err := json.MarshalIndent(players, "", "  ")
-	if err != nil {
-		return fmt.Errorf("erro ao serializar jogadores: %w", err)
-	}
-
-	tempFile := pm.file + ".tmp"
-	err = os.WriteFile(tempFile, data, 0644)
-	if err != nil {
-		return fmt.Errorf("erro ao escrever arquivo temporário: %w", err)
-	}
-
-	err = os.Rename(tempFile, pm.file)
-	if err != nil {
-		return fmt.Errorf("erro ao renomear arquivo: %w", err)
-	}
-
-	return nil
 }
 
 // Criar jogador
-func (pm *PlayerManager) AddPlayer(conn net.Conn, name string, password string) (*Player, error) {
+func (pm *PlayerManager) AddPlayer(conn net.Conn, name string) (*Player, error) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
-	playersData, err := pm.readPlayerData()
-	if err != nil {
-		return nil, fmt.Errorf("erro ao ler jogadores: %w", err)
-	}
-
-	// Verifica se jogador já existe
-	for _, p := range playersData {
+	// Verifica se já existe
+	for _, p := range pm.players {
 		if p.Name == name {
 			return nil, fmt.Errorf("jogador já existe")
 		}
 	}
 
-	newPlayerData := PlayerData{
-		ID:       len(playersData),
+	newPlayer := Player{
+		ID:       len(pm.players),
 		Name:     name,
-		Password: password,
+		Conn:     conn,
 		Duel:     false,
-		Cards:    nil,
+		Cards:    []Card{},
 	}
 
-	playersData = append(playersData, newPlayerData)
+	pm.players = append(pm.players, newPlayer)
 
-	if err := pm.writePlayerData(playersData); err != nil {
-		fmt.Print("\nDeu erro aqui")
-		return nil, fmt.Errorf("erro ao salvar jogadores: %w", err)
-	}
-
-	// Cria o Player completo com a conexão
-	newPlayer := &Player{
-		PlayerData: newPlayerData,
-		Conn:       conn,
-	}
-
-	fmt.Printf("Jogador adicionado: %s \n", newPlayer.Name)
-	return newPlayer, nil
+	fmt.Printf("Jogador adicionado: %s\n", newPlayer.Name)
+	return &newPlayer, nil
 }
 
-
-func (pm *PlayerManager) ListPlayers() ([]PlayerData, error) {
+// Listar jogadores
+func (pm *PlayerManager) ListPlayers() []Player {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
-	return pm.readPlayerData()
+	// retorna uma cópia para evitar problemas de concorrência
+	playersCopy := make([]Player, len(pm.players))
+	copy(playersCopy, pm.players)
+	return playersCopy
 }
 
-// Buscar jogador (retorna Player com conexão se disponível)
+// Buscar jogador por nome
 func (pm *PlayerManager) GetPlayer(name string) (*Player, error) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
-	playersData, err := pm.readPlayerData()
-	if err != nil {
-		return nil, err
-	}
-
-	for i := range playersData {
-		if playersData[i].Name == name {
-			return &Player{
-				PlayerData: playersData[i],
-				Conn:       nil, // Conexão será setada posteriormente
-			}, nil
+	for i := range pm.players {
+		if pm.players[i].Name == name {
+			return &pm.players[i], nil
 		}
 	}
 	return nil, fmt.Errorf("jogador %s não encontrado", name)
 }
 
-func (pm *PlayerManager) Verify_Login(name string, password string) (bool, error) {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
 
-	playersData, err := pm.readPlayerData()
-	if err != nil {
-		return false, err
-	}
 
-	for _, p := range playersData {
-		if p.Name == name && p.Password == password {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-// Atualizar dados do jogador (mantém a conexão se existir)
+// Atualizar jogador (mantendo a conexão)
 func (pm *PlayerManager) UpdatePlayer(player *Player) error {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
-	playersData, err := pm.readPlayerData()
-	if err != nil {
-		return err
-	}
-
-	found := false
-	for i := range playersData {
-		if playersData[i].ID == player.ID {
-			// Atualiza os dados mas mantém a conexão original
-			playersData[i] = player.PlayerData
-			found = true
-			break
+	for i := range pm.players {
+		if pm.players[i].ID == player.ID {
+			pm.players[i] = *player
+			return nil
 		}
 	}
-
-	if !found {
-		return fmt.Errorf("jogador %d não encontrado", player.ID)
-	}
-
-	return pm.writePlayerData(playersData)
+	return fmt.Errorf("jogador %d não encontrado", player.ID)
 }
 
 // Remover jogador
@@ -209,14 +102,9 @@ func (pm *PlayerManager) RemovePlayer(id int) error {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
-	playersData, err := pm.readPlayerData()
-	if err != nil {
-		return err
-	}
-
-	newPlayers := []PlayerData{}
+	newPlayers := []Player{}
 	found := false
-	for _, p := range playersData {
+	for _, p := range pm.players {
 		if p.ID != id {
 			newPlayers = append(newPlayers, p)
 		} else {
@@ -228,19 +116,11 @@ func (pm *PlayerManager) RemovePlayer(id int) error {
 		return fmt.Errorf("jogador %d não encontrado", id)
 	}
 
-	// Reatribui IDs para manter consistência
+	// reatribui IDs
 	for i := range newPlayers {
 		newPlayers[i].ID = i
 	}
+	pm.players = newPlayers
 
-	return pm.writePlayerData(newPlayers)
-}
-
-func (p *Player) ToData() PlayerData {
-	return p.PlayerData
-}
-
-func (p *Player) LoadData(data PlayerData) {
-	p.PlayerData = data
-	
+	return nil
 }

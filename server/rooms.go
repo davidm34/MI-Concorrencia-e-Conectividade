@@ -37,7 +37,8 @@ func (rm *RoomManager) AddPlayerRoom(p *Player) *Room {
     fmt.Printf("Adicionando jogador %s. Salas existentes: %d\n", p.Name, len(rm.rooms))
 
     for i := range rm.rooms {
-        if len(rm.rooms[i].Players) < 2 {
+
+       if len(rm.rooms[i].Players) < 2 {
             rm.rooms[i].Players = append(rm.rooms[i].Players, p)
             fmt.Printf("Jogador %s adicionado à sala %d\n", p.Name, rm.rooms[i].ID)
             
@@ -53,6 +54,7 @@ func (rm *RoomManager) AddPlayerRoom(p *Player) *Room {
         Players: []*Player{p},
         Actions: make(map[int]bool),
     }
+    
     rm.nextID++
     rm.rooms = append(rm.rooms, room)
     fmt.Printf("Nova sala %d criada para jogador %s. Esperando adversário...\n", room.ID, p.Name)
