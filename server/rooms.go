@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"sync"
 	"time"
+	"math/rand"
+	"strings"
+	"strconv"
 )
 
 type Room struct {
@@ -84,7 +87,6 @@ func (r *Room) RemovePlayer(p *Player) {
 }
 
 func HandlePlayer(p *Player, room *Room) {
-	p.Duel = true
 
 	// Goroutine de leitura contínua
 	go func() {
@@ -96,8 +98,16 @@ func HandlePlayer(p *Player, room *Room) {
 				room.RemovePlayer(p)
 				return
 			}
-			room.Broadcast(p, msg)
+			msg = strings.TrimSpace(msg)
+			if p.Duel {
+				// manda escolha para um canal do game
+				p.GameInput <- msg
+			} else {
+				// caso contrário, é mensagem de chat
+				room.Broadcast(p, msg)
+			}
 		}
+		
 	}()
 
 	// Espera os dois jogadores estarem prontos
@@ -113,4 +123,83 @@ func HandlePlayer(p *Player, room *Room) {
 	}
 
 	p.Conn.Write([]byte("Bem-vindo ao servidor!\n"))
+	Game(room, p)
+}
+
+
+func Game(r *Room, p *Player) {
+    
+    DrawCards(p)
+
+    p.Conn.Write([]byte("Cartas Sorteadas! Escolha uma carta nesse turno\n\n"))
+
+    for i, c := range p.Cards {
+        p.Conn.Write([]byte(fmt.Sprintf("Carta nº: %d\nNome: %s\nDano: %d\nRaridade: %s\n\n",
+            i, c.Name, c.Damage, c.Rarity)))
+
+	}
+	p.Conn.Write([]byte("Digite o número da carta que deseja jogar: \n"))
+
+    // reader := bufio.NewReader(p.Conn)
+	p.Duel = true
+	p.GameInput = make(chan string)
+	
+    for {
+
+		choiceStr := <-p.GameInput 
+		choice, err := strconv.Atoi(choiceStr)
+		if err != nil || choice < 0 || choice >= len(p.Cards) {
+			p.Conn.Write([]byte("Escolha inválida, tente novamente.\n"))
+		} else {
+			chosenCard := p.Cards[choice]
+			p.Conn.Write([]byte(fmt.Sprintf("Você escolheu: %s (Dano: %d)\n",
+				chosenCard.Name, chosenCard.Damage)))
+
+			r.Broadcast(p, fmt.Sprintf("%s escolheu uma carta!\n", p.Name))
+			
+		}
+
+    }
+}
+
+
+func DrawCards(p *Player){
+
+	var cards []Card = []Card{
+        {"Dragão Negro", 100, "Raro"},
+        {"Guerreiro Valente", 50, "Comum"},
+        {"Mago Arcano", 75, "Épico"},
+        {"Arqueiro Élfico", 60, "Raro"},
+        {"Cavaleiro da Luz", 85, "Lendário"},
+        {"Feiticeira das Sombras", 70, "Épico"},
+        {"Goblin Ladrão", 30, "Comum"},
+        {"Dragão de Fogo", 95, "Raro"},
+        {"Paladino Sagrado", 80, "Épico"},
+        {"Ninja Silencioso", 65, "Raro"},
+        {"Troll da Montanha", 90, "Épico"},
+        {"Fada Curandeira", 45, "Comum"},
+        {"Demônio do Abismo", 110, "Lendário"},
+        {"Lobo Selvagem", 40, "Comum"},
+        {"Sereia Encantadora", 55, "Raro"},
+        {"Gigante de Pedra", 120, "Lendário"},
+        {"Elfo da Floresta", 50, "Comum"},
+        {"Vampiro Noturno", 85, "Épico"},
+        {"Quimera Mística", 105, "Lendário"},
+        {"Espadachim Ágil", 60, "Raro"},
+    }
+
+    p.Conn.Write([]byte("Começando os Sorteios das Cartas...\n"))
+    time.Sleep(2 * time.Second)
+
+
+	rand.Seed(time.Now().UnixNano())
+    for i := 0; i < 3; i++ {
+		pos := rand.Intn(len(cards))
+		for cards[pos].Name == " " {
+			pos = rand.Intn(len(cards))
+		}
+		p.Cards = append(p.Cards, cards[pos])
+		cards = append(cards[:pos], cards[pos+1:]...)
+    }
+
 }
