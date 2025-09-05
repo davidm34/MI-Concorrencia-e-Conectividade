@@ -9,9 +9,8 @@ import (
 	"strings"
 )
 
-var manager = NewPlayerManager("players.json")
+var manager = NewPlayerManager()
 var rooms = NewRoomManager()
-
 
 func ReadPlayer(conn net.Conn, reader *bufio.Reader) (string, error) {
 	message, err := reader.ReadString('\n')
@@ -24,7 +23,7 @@ func ReadPlayer(conn net.Conn, reader *bufio.Reader) (string, error) {
 		return "", err
 	}
 
-	message = strings.TrimSpace(message) // Remove '\n' e espaços extras
+	message = strings.TrimSpace(message)
 	if message != "" {
 		_, err = conn.Write([]byte("Servidor recebeu: " + message + "\n"))
 		if err != nil {
@@ -36,100 +35,27 @@ func ReadPlayer(conn net.Conn, reader *bufio.Reader) (string, error) {
 }
 
 func handleConnection(conn net.Conn) {
-    defer conn.Close()
     reader := bufio.NewReader(conn)
 
-    // Lê o tipo de operação (login ou cadastro)
-    login, err := ReadPlayer(conn, reader)
+    name, err := ReadPlayer(conn, reader)
     if err != nil {
-        fmt.Printf("Erro ao ler operação: %v\n", err)
+        conn.Close()
         return
     }
 
-    var player *Player
-    var room *Room
-
-    switch login {
-    case "0": // Login
-        name, err := ReadPlayer(conn, reader)
-        if err != nil {
-            fmt.Printf("Erro ao ler nome: %v\n", err)
-            return
-        }
-        password, err := ReadPlayer(conn, reader)
-        if err != nil {
-            fmt.Printf("Erro ao ler senha: %v\n", err)
-            return
-        }
-
-        ok, err := manager.Verify_Login(name, password)
-        if err != nil {
-            conn.Write([]byte("Erro no login.\n"))
-            fmt.Printf("Erro no login de %s: %v\n", name, err)
-            return
-        }
-        
-        if ok {
-            conn.Write([]byte("Login realizado com sucesso.\n"))            
-            fmt.Printf("Jogador %s logou.\n", name)
-
-            // Atualiza conexão do jogador
-            player, err = manager.GetPlayer(name)
-            if err != nil {
-                conn.Write([]byte("Erro ao carregar jogador.\n"))
-                fmt.Printf("Erro ao carregar jogador %s: %v\n", name, err)
-                return
-            }
-            
-            player.Conn = conn  // Atualiza conexão
-            room = rooms.AddPlayerRoom(player)
-            
-        } else {
-            conn.Write([]byte("Login falhou.\n"))
-            fmt.Printf("Login falhou para %s\n", name)
-            return
-        }
-
-    case "1": // Cadastro
-        name, err := ReadPlayer(conn, reader)
-        if err != nil {
-            fmt.Printf("Erro ao ler nome (cadastro): %v\n", err)
-            return
-        }
-        password, err := ReadPlayer(conn, reader)
-        if err != nil {
-            fmt.Printf("Erro ao ler senha (cadastro): %v\n", err)
-            return
-        }
-
-        player, err = manager.AddPlayer(conn, name, password)
-        if err != nil {
-            conn.Write([]byte("Erro no cadastro.\n"))
-            fmt.Printf("Erro no cadastro de %s: %v\n", name, err)
-            return
-        }
-        
-        conn.Write([]byte("Cadastro realizado com sucesso.\n"))
-        room = rooms.AddPlayerRoom(player)
-
-    default:
-        conn.Write([]byte("Opção inválida. Digite 0 ou 1.\n"))
-        fmt.Printf("Opção inválida recebida: %s\n", login)
+    player, err := manager.AddPlayer(conn, name)
+    if err != nil {
+        conn.Write([]byte("Erro: " + err.Error() + "\n"))
+        conn.Close()
         return
     }
 
-    // Se chegou aqui, o jogador foi autenticado com sucesso
-    // Agora inicia o loop principal do jogador
-    fmt.Printf("Iniciando HandlePlayer para %s\n", player.Name)
-    HandlePlayer(player, room)
-    
-    // NOTA: Não usar go HandlePlayer() - queremos que esta goroutine
-    // continue executando o HandlePlayer até o jogador sair
+    room := rooms.AddPlayerRoom(player)
+    go HandlePlayer(player, room)
 }
 
 
 func main() {
-	// Cria servidor na porta 8080
 	ln, err := net.Listen("tcp", ":8080")
 	if err != nil {
 		fmt.Println("Erro ao iniciar servidor:", err)
@@ -140,14 +66,11 @@ func main() {
 	fmt.Println("Servidor TCP rodando na porta 8080...")
 
 	for {
-		// Aceita nova conexão
 		conn, err := ln.Accept()
 		if err != nil {
 			fmt.Println("Erro ao aceitar conexão:", err)
 			continue
 		}
-
-		// Trata cliente em goroutine
 		go handleConnection(conn)
 	}
 }
