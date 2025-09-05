@@ -13,11 +13,11 @@ type Card struct {
 }
 
 type Player struct {
-	ID       int
-	Name     string
-	Conn     net.Conn
-	Duel     bool
-	Cards    []Card
+	ID    int
+	Name  string
+	Conn  net.Conn
+	Duel  bool
+	Cards []Card
 }
 
 type PlayerManager struct {
@@ -44,18 +44,18 @@ func (pm *PlayerManager) AddPlayer(conn net.Conn, name string) (*Player, error) 
 	}
 
 	newPlayer := Player{
-		ID:       len(pm.players),
-		Name:     name,
-		Conn:     conn,
-		Duel:     false,
-		Cards:    []Card{},
+		ID:    len(pm.players),
+		Name:  name,
+		Conn:  conn,
+		Duel:  false,
+		Cards: []Card{},
 	}
 
 	pm.players = append(pm.players, newPlayer)
-
 	fmt.Printf("Jogador adicionado: %s\n", newPlayer.Name)
-	return &newPlayer, nil
+	return &pm.players[len(pm.players)-1], nil
 }
+
 
 // Listar jogadores
 func (pm *PlayerManager) ListPlayers() []Player {
@@ -97,30 +97,3 @@ func (pm *PlayerManager) UpdatePlayer(player *Player) error {
 	return fmt.Errorf("jogador %d não encontrado", player.ID)
 }
 
-// Remover jogador
-func (pm *PlayerManager) RemovePlayer(id int) error {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-
-	newPlayers := []Player{}
-	found := false
-	for _, p := range pm.players {
-		if p.ID != id {
-			newPlayers = append(newPlayers, p)
-		} else {
-			found = true
-		}
-	}
-
-	if !found {
-		return fmt.Errorf("jogador %d não encontrado", id)
-	}
-
-	// reatribui IDs
-	for i := range newPlayers {
-		newPlayers[i].ID = i
-	}
-	pm.players = newPlayers
-
-	return nil
-}

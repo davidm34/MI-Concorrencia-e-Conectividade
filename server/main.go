@@ -12,7 +12,6 @@ import (
 var manager = NewPlayerManager()
 var rooms = NewRoomManager()
 
-
 func ReadPlayer(conn net.Conn, reader *bufio.Reader) (string, error) {
 	message, err := reader.ReadString('\n')
 	if err != nil {
@@ -24,7 +23,7 @@ func ReadPlayer(conn net.Conn, reader *bufio.Reader) (string, error) {
 		return "", err
 	}
 
-	message = strings.TrimSpace(message) // Remove '\n' e espaços extras
+	message = strings.TrimSpace(message)
 	if message != "" {
 		_, err = conn.Write([]byte("Servidor recebeu: " + message + "\n"))
 		if err != nil {
@@ -36,22 +35,27 @@ func ReadPlayer(conn net.Conn, reader *bufio.Reader) (string, error) {
 }
 
 func handleConnection(conn net.Conn) {
-    defer conn.Close()
     reader := bufio.NewReader(conn)
-    name, _ := ReadPlayer(conn, reader)
-    player, _ := manager.AddPlayer(conn, name)
-    if player != nil {
-        room := rooms.AddPlayerRoom(player)
-        go HandlePlayer(player, room)
+
+    name, err := ReadPlayer(conn, reader)
+    if err != nil {
+        conn.Close()
+        return
     }
 
-    
+    player, err := manager.AddPlayer(conn, name)
+    if err != nil {
+        conn.Write([]byte("Erro: " + err.Error() + "\n"))
+        conn.Close()
+        return
+    }
 
+    room := rooms.AddPlayerRoom(player)
+    go HandlePlayer(player, room)
 }
 
 
 func main() {
-	// Cria servidor na porta 8080
 	ln, err := net.Listen("tcp", ":8080")
 	if err != nil {
 		fmt.Println("Erro ao iniciar servidor:", err)
@@ -62,14 +66,11 @@ func main() {
 	fmt.Println("Servidor TCP rodando na porta 8080...")
 
 	for {
-		// Aceita nova conexão
 		conn, err := ln.Accept()
 		if err != nil {
 			fmt.Println("Erro ao aceitar conexão:", err)
 			continue
 		}
-
-		// Trata cliente em goroutine
 		go handleConnection(conn)
 	}
 }
