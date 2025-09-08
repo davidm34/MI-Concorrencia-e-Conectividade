@@ -141,36 +141,33 @@ func Game(r *Room, p *Player, pm *PlayerManager, rm *RoomManager) {
             i, c.Name, c.Damage, c.Rarity)))
 
 	}
-	p.Conn.Write([]byte("Digite o número da carta que deseja jogar: \n"))
 
     // reader := bufio.NewReader(p.Conn)
 	p.Duel = true
 	p.GameInput = make(chan string)
-    plays := 0 
 	
-	for {
-		// enquanto plays < 2, o jogador continua escolhendo cartas
-		for plays < 2 {
-			choiceStr := <-p.GameInput
-			choice, err := strconv.Atoi(choiceStr)
-
-			if err != nil || choice < 0 || choice >= len(p.Cards) {
-				p.Conn.Write([]byte("Escolha inválida, tente novamente.\n"))
-				continue
-			}
-
+	for { 
+		p.Conn.Write([]byte("Digite o número da carta que deseja jogar: \n"))
+		choiceStr := <-p.GameInput 
+		choice, err := strconv.Atoi(choiceStr) 
+		if err != nil || choice < 0 || choice >= len(p.Cards) { 
+			p.Conn.Write([]byte("Escolha inválida, tente novamente.\n")) 
+		} else { 
 			chosenCard := p.Cards[choice]
-			plays++ 
-			p.Conn.Write([]byte(fmt.Sprintf(
-				"Você escolheu: %s (Dano: %d) | Jogada %d de 2\n",
-				chosenCard.Name, chosenCard.Damage, plays,
-			)))
-
 			r.Broadcast(p, fmt.Sprintf("%s escolheu uma carta!\n", p.Name))
-		}
-
-		plays = 0
-		p.Conn.Write([]byte("Suas 2 jogadas foram feitas. Próxima rodada!\n"))
+			for i := 0; i < 2; i++ {
+				if r.Players[i].ID == p.ID {
+					p.SelectionRound = true
+					p.Conn.Write([]byte(fmt.Sprintf("Você escolheu: %s (Dano: %d)\n", chosenCard.Name, chosenCard.Damage))) 
+				} 
+			} 
+			for (!r.Players[0].SelectionRound && r.Players[1].SelectionRound) || (r.Players[0].SelectionRound && !r.Players[1].SelectionRound) {
+				p.Conn.Write([]byte("Aguardando a jogada do adversário... \n"))
+				time.Sleep(4 * time.Second)
+			} 
+			r.Players[0].SelectionRound = false
+			r.Players[1].SelectionRound = false
+		} 
 	}
 
 }

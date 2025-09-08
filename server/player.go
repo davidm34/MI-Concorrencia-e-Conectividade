@@ -17,6 +17,7 @@ type Player struct {
 	Name  string
 	Conn  net.Conn
 	Duel  bool
+	SelectionRound bool
 	Cards []Card
 	GameInput chan string 
 }
@@ -49,6 +50,7 @@ func (pm *PlayerManager) AddPlayer(conn net.Conn, name string) (*Player, error) 
 		Name:  name,
 		Conn:  conn,
 		Duel:  false,
+		SelectionRound: false,
 		Cards: []Card{},
 		GameInput: make(chan string),
 	}
