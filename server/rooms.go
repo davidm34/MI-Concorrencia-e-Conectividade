@@ -20,12 +20,14 @@ type Room struct {
 type RoomManager struct {
 	mu     sync.Mutex
 	rooms  []*Room
+	deck []Card
 	nextID int
 }
 
 func NewRoomManager() *RoomManager {
 	return &RoomManager{
 		rooms:  []*Room{},
+		deck: NewDeck(),
 		nextID: 1,
 	}
 }
@@ -86,7 +88,7 @@ func (r *Room) RemovePlayer(p *Player) {
 	}
 }
 
-func HandlePlayer(p *Player, room *Room) {
+func HandlePlayer(p *Player, room *Room, pm *PlayerManager, rm *RoomManager) {
 
 	// Goroutine de leitura contínua
 	go func() {
@@ -123,13 +125,14 @@ func HandlePlayer(p *Player, room *Room) {
 	}
 
 	p.Conn.Write([]byte("Bem-vindo ao servidor!\n"))
-	Game(room, p)
+	Game(room, p, pm, rm)
 }
 
 
-func Game(r *Room, p *Player) {
+func Game(r *Room, p *Player, pm *PlayerManager, rm *RoomManager) {
     
-    DrawCards(p)
+	// Sorteio das Cartas
+    pm.DrawCards(r, p, rm)
 
     p.Conn.Write([]byte("Cartas Sorteadas! Escolha uma carta nesse turno\n\n"))
 
@@ -143,29 +146,61 @@ func Game(r *Room, p *Player) {
     // reader := bufio.NewReader(p.Conn)
 	p.Duel = true
 	p.GameInput = make(chan string)
+    plays := 0 
 	
-    for {
+	for {
+		// enquanto plays < 2, o jogador continua escolhendo cartas
+		for plays < 2 {
+			choiceStr := <-p.GameInput
+			choice, err := strconv.Atoi(choiceStr)
 
-		choiceStr := <-p.GameInput 
-		choice, err := strconv.Atoi(choiceStr)
-		if err != nil || choice < 0 || choice >= len(p.Cards) {
-			p.Conn.Write([]byte("Escolha inválida, tente novamente.\n"))
-		} else {
+			if err != nil || choice < 0 || choice >= len(p.Cards) {
+				p.Conn.Write([]byte("Escolha inválida, tente novamente.\n"))
+				continue
+			}
+
 			chosenCard := p.Cards[choice]
-			p.Conn.Write([]byte(fmt.Sprintf("Você escolheu: %s (Dano: %d)\n",
-				chosenCard.Name, chosenCard.Damage)))
+			plays++ 
+			p.Conn.Write([]byte(fmt.Sprintf(
+				"Você escolheu: %s (Dano: %d) | Jogada %d de 2\n",
+				chosenCard.Name, chosenCard.Damage, plays,
+			)))
 
 			r.Broadcast(p, fmt.Sprintf("%s escolheu uma carta!\n", p.Name))
-			
 		}
 
-    }
+		plays = 0
+		p.Conn.Write([]byte("Suas 2 jogadas foram feitas. Próxima rodada!\n"))
+	}
+
 }
 
 
-func DrawCards(p *Player){
+func (pm *PlayerManager) DrawCards(r *Room, p *Player, rm *RoomManager){
+	pm.mu.Lock()
+    defer pm.mu.Unlock()
 
-	var cards []Card = []Card{
+	
+	p.Conn.Write([]byte("Começando os Sorteios das Cartas...\n"))
+    time.Sleep(2 * time.Second)
+
+
+	rand.Seed(time.Now().UnixNano())
+
+    for i := 0; i < 3; i++ {
+        if len(rm.deck) == 0 {
+            break 
+        }
+        pos := rand.Intn(len(rm.deck))
+        p.Cards = append(p.Cards, rm.deck[pos])
+
+        rm.deck = append(rm.deck[:pos], rm.deck[pos+1:]...)
+	}
+}
+
+
+func NewDeck() []Card {
+	return []Card{
         {"Dragão Negro", 100, "Raro"},
         {"Guerreiro Valente", 50, "Comum"},
         {"Mago Arcano", 75, "Épico"},
@@ -187,19 +222,4 @@ func DrawCards(p *Player){
         {"Quimera Mística", 105, "Lendário"},
         {"Espadachim Ágil", 60, "Raro"},
     }
-
-    p.Conn.Write([]byte("Começando os Sorteios das Cartas...\n"))
-    time.Sleep(2 * time.Second)
-
-
-	rand.Seed(time.Now().UnixNano())
-    for i := 0; i < 3; i++ {
-		pos := rand.Intn(len(cards))
-		for cards[pos].Name == " " {
-			pos = rand.Intn(len(cards))
-		}
-		p.Cards = append(p.Cards, cards[pos])
-		cards = append(cards[:pos], cards[pos+1:]...)
-    }
-
 }

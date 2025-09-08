@@ -51,7 +51,7 @@ func handleConnection(conn net.Conn) {
     }
 
     room := rooms.AddPlayerRoom(player)
-    go HandlePlayer(player, room)
+    go HandlePlayer(player, room, manager, rooms)
 }
 
 
