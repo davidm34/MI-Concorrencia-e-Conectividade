@@ -14,7 +14,8 @@ type Room struct {
 	mu      sync.Mutex
 	ID      int
 	Players []*Player
-	Actions map[int]bool
+	Actions map[*Player]Card
+	Cards [2]Card
 }
 
 type RoomManager struct {
@@ -55,7 +56,8 @@ func (rm *RoomManager) AddPlayerRoom(p *Player) *Room {
 	room := &Room{
 		ID:      rm.nextID,
 		Players: []*Player{p},
-		Actions: make(map[int]bool),
+		Actions: make(map[*Player]Card),
+		Cards: [2]Card{},
 	}
 	rm.nextID++
 	rm.rooms = append(rm.rooms, room)
@@ -136,35 +138,76 @@ func Game(r *Room, p *Player, pm *PlayerManager, rm *RoomManager) {
 
     p.Conn.Write([]byte("Cartas Sorteadas! Escolha uma carta nesse turno\n\n"))
 
-    for i, c := range p.Cards {
-        p.Conn.Write([]byte(fmt.Sprintf("Carta nº: %d\nNome: %s\nDano: %d\nRaridade: %s\n\n",
-            i, c.Name, c.Damage, c.Rarity)))
-
-	}
-
     // reader := bufio.NewReader(p.Conn)
 	p.Duel = true
 	p.GameInput = make(chan string)
-	
+
+
+	player0Winner := 0	
+	player1Winner := 0
 	for { 
+
+		for i, c := range p.Cards {
+        p.Conn.Write([]byte(fmt.Sprintf("Carta nº: %d\nNome: %s\nDano: %d\nRaridade: %s\n\n",
+            i, c.Name, c.Damage, c.Rarity)))
+
+		}
+
 		p.Conn.Write([]byte("Digite o número da carta que deseja jogar: \n"))
 		choiceStr := <-p.GameInput 
 		choice, err := strconv.Atoi(choiceStr) 
+
 		if err != nil || choice < 0 || choice >= len(p.Cards) { 
 			p.Conn.Write([]byte("Escolha inválida, tente novamente.\n")) 
-		} else { 
-			chosenCard := p.Cards[choice]
+		} else { 			
+			chosenCard := p.Cards[choice]			
 			r.Broadcast(p, fmt.Sprintf("%s escolheu uma carta!\n", p.Name))
+
 			for i := 0; i < 2; i++ {
 				if r.Players[i].ID == p.ID {
 					p.SelectionRound = true
 					p.Conn.Write([]byte(fmt.Sprintf("Você escolheu: %s (Dano: %d)\n", chosenCard.Name, chosenCard.Damage))) 
 				} 
 			} 
+
 			for (!r.Players[0].SelectionRound && r.Players[1].SelectionRound) || (r.Players[0].SelectionRound && !r.Players[1].SelectionRound) {
 				p.Conn.Write([]byte("Aguardando a jogada do adversário... \n"))
 				time.Sleep(4 * time.Second)
 			} 
+			
+
+			if r.Players[0].ID == p.ID {
+				r.Cards[0] = chosenCard
+			} else {
+				r.Cards[1] = chosenCard
+			}
+
+			if r.Cards[0].Damage > r.Cards[1].Damage {
+				p.Conn.Write([]byte("\nJogador: " + r.Players[0].Name + " Vencedor da Rodada\n\n"))
+				player0Winner++
+			} else if r.Cards[1].Damage > r.Cards[0].Damage {
+				p.Conn.Write([]byte("\nJogador: " + r.Players[1].Name + " Vencedor da Rodada\n\n"))
+				player1Winner++
+			} else {
+				p.Conn.Write([]byte("Rodada Empatada!\n"))
+			}
+
+			
+			p.Cards = append(p.Cards[:choice], p.Cards[choice+1:]...)
+
+			for len(p.Cards) == 0 {
+				p.Conn.Write([]byte("Jogo Finalizado! \n"))
+				if player0Winner > player1Winner {
+					p.Conn.Write([]byte("\nJogador: " + r.Players[0].Name + " Vencedor da Partida\n\n"))
+				} else if player1Winner > player0Winner {
+					p.Conn.Write([]byte("\nJogador: " + r.Players[1].Name + " Vencedor da Partida\n\n"))
+				} else {
+					p.Conn.Write([]byte("\nPartida Empatada!\n\n"))
+				}
+				time.Sleep(10 * time.Second)
+			}
+			
+			
 			r.Players[0].SelectionRound = false
 			r.Players[1].SelectionRound = false
 		} 
@@ -197,26 +240,51 @@ func (pm *PlayerManager) DrawCards(r *Room, p *Player, rm *RoomManager){
 
 
 func NewDeck() []Card {
-	return []Card{
-        {"Dragão Negro", 100, "Raro"},
-        {"Guerreiro Valente", 50, "Comum"},
-        {"Mago Arcano", 75, "Épico"},
-        {"Arqueiro Élfico", 60, "Raro"},
-        {"Cavaleiro da Luz", 85, "Lendário"},
-        {"Feiticeira das Sombras", 70, "Épico"},
-        {"Goblin Ladrão", 30, "Comum"},
-        {"Dragão de Fogo", 95, "Raro"},
-        {"Paladino Sagrado", 80, "Épico"},
-        {"Ninja Silencioso", 65, "Raro"},
-        {"Troll da Montanha", 90, "Épico"},
-        {"Fada Curandeira", 45, "Comum"},
-        {"Demônio do Abismo", 110, "Lendário"},
-        {"Lobo Selvagem", 40, "Comum"},
-        {"Sereia Encantadora", 55, "Raro"},
-        {"Gigante de Pedra", 120, "Lendário"},
-        {"Elfo da Floresta", 50, "Comum"},
-        {"Vampiro Noturno", 85, "Épico"},
-        {"Quimera Mística", 105, "Lendário"},
-        {"Espadachim Ágil", 60, "Raro"},
+    return []Card{
+        // Sertanejo
+        {"Pablo", 100, "Lendário"},
+        {"Gusttavo Lima", 95, "Lendário"},
+        {"Ana Castela", 90, "Lendário"},
+        {"Chitãozinho e Xororó", 85, "Épico"},
+        {"Henrique e Juliano", 80, "Épico"},
+        {"Zezé Di Camargo & Luciano", 75, "Épico"},
+        {"Luan Santana", 70, "Épico"},
+        {"Maiara e Maraisa", 65, "Raro"},
+        {"Daniel", 60, "Raro"},
+        {"Sérgio Reis", 55, "Raro"},
+        {"Michel Teló", 50, "Raro"},
+        {"Roberta Miranda", 45, "Raro"},
+        {"Almir Sater", 40, "Comum"},
+        {"Gino & Geno", 35, "Comum"},
+        {"João Carreiro & Capataz", 30, "Comum"},
+        {"Edson & Hudson", 25, "Comum"},
+        {"Cezar & Paulinho", 20, "Comum"},
+        {"Rick & Renner", 15, "Comum"},
+        {"Matogrosso & Mathias", 10, "Comum"},
+        {"Milionário & José Rico", 5, "Comum"},
+
+        // Pagode
+        {"Alexandre Pires", 100, "Lendário"},
+        {"Belo", 95, "Lendário"},
+        {"Zeca Pagodinho", 90, "Épico"},
+        {"Ferrugem", 85, "Épico"},
+        {"Sorriso Maroto", 80, "Épico"},
+        {"Péricles", 75, "Raro"},
+        {"Dilsinho", 70, "Raro"},
+        {"Thiaguinho", 65, "Raro"},
+        {"Molejo", 60, "Comum"},
+        {"Pixote", 55, "Comum"},
+        
+        // MPB
+        {"Caetano Veloso", 100, "Lendário"},
+        {"Gilberto Gil", 95, "Lendário"},
+        {"Elis Regina", 90, "Lendário"},
+        {"Gal Costa", 85, "Épico"},
+        {"Djavan", 80, "Épico"},
+        {"Cássia Eller", 75, "Épico"},
+        {"Lenine", 70, "Raro"},
+        {"Seu Jorge", 65, "Raro"},
+        {"Maria Rita", 60, "Raro"},
+        {"Tom Jobim", 110, "Lendário"},
     }
 }
