@@ -63,6 +63,15 @@ func main() {
 	}
 	defer ln.Close()
 
+	serverUdp, err := net.ListenPacket("udp", ":8081")
+	if err != nil {
+		fmt.Println("Erro ao iniciar servidor UDP:", err)
+		os.Exit(1)
+	}
+	defer serverUdp.Close()
+
+	buffer := make([]byte, 1024)
+
 	fmt.Println("Servidor TCP rodando na porta 8080...")
 
 	for {
@@ -71,6 +80,23 @@ func main() {
 			fmt.Println("Erro ao aceitar conexão:", err)
 			continue
 		}
+		// Calculo de Ping
+		n, clientAddr, err := serverUdp.ReadFrom(buffer)
+		if err != nil {
+			fmt.Println("Erro ao ler:", err)
+			continue
+		}
+
+		msg := string(buffer[:n])
+		fmt.Printf("Recebido de %v: %s\n", clientAddr, msg)
+
+		// ecoa de volta
+		_, err = serverUdp.WriteTo([]byte(msg), clientAddr)
+		if err != nil {
+			fmt.Println("Erro ao enviar resposta:", err)
+		}
+
+
 		go handleConnection(conn)
 	}
 }

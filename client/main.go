@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"time"
 )
 
 func main() {
@@ -15,10 +16,19 @@ func main() {
 		return
 	}
 	
-
 	defer conn.Close()
 
 	fmt.Println("Conectado ao servidor!")
+
+	// Conecta ao servidor
+	connUdp, err := net.Dial("udp", "server:8081")
+	if err != nil {
+		fmt.Println("Erro ao conectar:", err)
+		return
+	}
+	defer conn.Close()
+
+	Udp(connUdp)	
 
 	reader := bufio.NewReader(os.Stdin)
 
@@ -49,4 +59,30 @@ func main() {
 		}
 		conn.Write([]byte(text + "\n"))
 	}
+}
+
+
+func Udp(connUdp net.Conn){
+
+	buffer := make([]byte, 1024)
+
+	message := "Ping: "
+
+	// Marca o tempo antes de enviar
+	start := time.Now()
+	_ , errUdp := connUdp.Write([]byte(message))
+	if errUdp != nil {
+		fmt.Println("Erro ao enviar:", errUdp)
+	}
+
+	// Aguarda resposta
+	n, err := connUdp.Read(buffer)
+	if err != nil {
+		fmt.Println("Erro ao ler resposta:", err)
+	}
+	elapsed := time.Since(start)
+
+	fmt.Printf("Servidor respondeu: %s | RTT: %v\n", string(buffer[:n]), elapsed)
+
+
 }

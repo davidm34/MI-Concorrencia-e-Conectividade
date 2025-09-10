@@ -140,7 +140,7 @@ func HandlePlayer(p *Player, room *Room, pm *PlayerManager, rm *RoomManager) {
 
 
 func Game(r *Room, p *Player, pm *PlayerManager, rm *RoomManager) {
-    
+
 	// Sorteio das Cartas
     pm.DrawCards(r, p, rm)
 
@@ -169,6 +169,13 @@ func Game(r *Room, p *Player, pm *PlayerManager, rm *RoomManager) {
 			chosenCard := p.Cards[choice]			
 			r.Broadcast(p, fmt.Sprintf("%s escolheu uma carta!\n", p.Name), false, true)
 
+			if r.Players[0].ID == p.ID {
+				r.Cards[0] = p.Cards[choice]
+			} else {
+				r.Cards[1] = p.Cards[choice]
+			}
+
+
 			for i := 0; i < 2; i++ {
 				if r.Players[i].ID == p.ID {
 					p.SelectionRound = true
@@ -181,12 +188,7 @@ func Game(r *Room, p *Player, pm *PlayerManager, rm *RoomManager) {
 				time.Sleep(4 * time.Second)
 			} 
 			
-
-			if r.Players[0].ID == p.ID {
-				r.Cards[0] = chosenCard
-			} else {
-				r.Cards[1] = chosenCard
-			}
+			p.Cards = append(p.Cards[:choice], p.Cards[choice+1:]...)
 
 			if r.Cards[0].Damage > r.Cards[1].Damage {
 				r.PlayerWins[0]++
@@ -201,27 +203,24 @@ func Game(r *Room, p *Player, pm *PlayerManager, rm *RoomManager) {
 			} else {
 				r.Broadcast(nil, "Rodada Empatada!\n", true, false)
 			}
-
-
-			
-			p.Cards = append(p.Cards[:choice], p.Cards[choice+1:]...)
-
-			if len(r.Players[0].Cards) == 0 && len(r.Players[1].Cards) == 0 {
-				r.Broadcast(nil, "Jogo Finalizado!\n", true, false)
-				if r.PlayerWins[0] > r.PlayerWins[1] {
-					r.Broadcast(nil, "\nJogador: " + r.Players[0].Name + " Vencedor da Partida\n\n", true, false)
-				} else if r.PlayerWins[1] > r.PlayerWins[0] {
-					r.Broadcast(nil, "\nJogador: " + r.Players[1].Name + " Vencedor da Partida\n\n", true, false)
-				} else {
-					r.Broadcast(nil, "\nPartida Empatada!\n\n", true, false)
-				}
-			}
-
-			
 			
 			r.Players[0].SelectionRound = false
 			r.Players[1].SelectionRound = false
+
+			if len(r.Players[0].Cards) == 0 && len(r.Players[1].Cards) == 0 {
+				break
+			}
+							
 		} 
+	}
+
+	r.Broadcast(nil, "\nJogo Finalizado!\n", true, false)
+	if r.PlayerWins[0] > r.PlayerWins[1] {
+		r.Broadcast(nil, "\nJogador: " + r.Players[0].Name + " Vencedor da Partida\n\n", true, false)
+	} else if r.PlayerWins[1] > r.PlayerWins[0] {
+		r.Broadcast(nil, "\nJogador: " + r.Players[1].Name + " Vencedor da Partida\n\n", true, false)
+	} else {
+		r.Broadcast(nil, "\nPartida Empatada!\n\n", true, false)
 	}
 
 }
