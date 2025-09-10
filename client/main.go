@@ -14,6 +14,8 @@ func main() {
 		fmt.Println("Erro ao conectar:", err)
 		return
 	}
+	
+
 	defer conn.Close()
 
 	fmt.Println("Conectado ao servidor!")

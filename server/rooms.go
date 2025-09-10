@@ -16,6 +16,7 @@ type Room struct {
 	Players []*Player
 	Actions map[*Player]Card
 	Cards [2]Card
+	PlayerWins [2]int
 }
 
 type RoomManager struct {
@@ -58,6 +59,7 @@ func (rm *RoomManager) AddPlayerRoom(p *Player) *Room {
 		Players: []*Player{p},
 		Actions: make(map[*Player]Card),
 		Cards: [2]Card{},
+		PlayerWins: [2]int{},
 	}
 	rm.nextID++
 	rm.rooms = append(rm.rooms, room)
@@ -66,13 +68,19 @@ func (rm *RoomManager) AddPlayerRoom(p *Player) *Room {
 	return room
 }
 
-func (r *Room) Broadcast(sender *Player, msg string) {
-	for _, p := range r.Players {
-		if p != sender {
-			p.Conn.Write([]byte(sender.Name + ": " + msg))
-		}
-	}
+func (r *Room) Broadcast(sender *Player, msg string, includeSender bool, prefix bool) {
+    for _, p := range r.Players {
+        if !includeSender && p == sender {
+            continue
+        }
+        if prefix && sender != nil {
+            p.Conn.Write([]byte(sender.Name + ": " + msg))
+        } else {
+            p.Conn.Write([]byte(msg))
+        }
+    }
 }
+
 
 func (r *Room) RemovePlayer(p *Player) {
 	r.mu.Lock()
@@ -108,7 +116,7 @@ func HandlePlayer(p *Player, room *Room, pm *PlayerManager, rm *RoomManager) {
 				p.GameInput <- msg
 			} else {
 				// caso contrário, é mensagem de chat
-				room.Broadcast(p, msg)
+				room.Broadcast(p, msg, false, true)
 			}
 		}
 		
@@ -143,8 +151,6 @@ func Game(r *Room, p *Player, pm *PlayerManager, rm *RoomManager) {
 	p.GameInput = make(chan string)
 
 
-	player0Winner := 0	
-	player1Winner := 0
 	for { 
 
 		for i, c := range p.Cards {
@@ -161,7 +167,7 @@ func Game(r *Room, p *Player, pm *PlayerManager, rm *RoomManager) {
 			p.Conn.Write([]byte("Escolha inválida, tente novamente.\n")) 
 		} else { 			
 			chosenCard := p.Cards[choice]			
-			r.Broadcast(p, fmt.Sprintf("%s escolheu uma carta!\n", p.Name))
+			r.Broadcast(p, fmt.Sprintf("%s escolheu uma carta!\n", p.Name), false, true)
 
 			for i := 0; i < 2; i++ {
 				if r.Players[i].ID == p.ID {
@@ -183,29 +189,34 @@ func Game(r *Room, p *Player, pm *PlayerManager, rm *RoomManager) {
 			}
 
 			if r.Cards[0].Damage > r.Cards[1].Damage {
-				p.Conn.Write([]byte("\nJogador: " + r.Players[0].Name + " Vencedor da Rodada\n\n"))
-				player0Winner++
+				r.PlayerWins[0]++
+				fmt.Println("0: ")
+				fmt.Println(r.Cards[0].Damage)
+				r.Broadcast(nil, "\nJogador: " + r.Players[0].Name + " Vencedor da Rodada\n\n", true, false)
 			} else if r.Cards[1].Damage > r.Cards[0].Damage {
-				p.Conn.Write([]byte("\nJogador: " + r.Players[1].Name + " Vencedor da Rodada\n\n"))
-				player1Winner++
+				fmt.Println("1: ")
+				fmt.Println(r.Cards[1].Damage)
+				r.PlayerWins[1]++
+				r.Broadcast(nil, "\nJogador: " + r.Players[1].Name + " Vencedor da Rodada\n\n", true, false)
 			} else {
-				p.Conn.Write([]byte("Rodada Empatada!\n"))
+				r.Broadcast(nil, "Rodada Empatada!\n", true, false)
 			}
+
 
 			
 			p.Cards = append(p.Cards[:choice], p.Cards[choice+1:]...)
 
-			for len(p.Cards) == 0 {
-				p.Conn.Write([]byte("Jogo Finalizado! \n"))
-				if player0Winner > player1Winner {
-					p.Conn.Write([]byte("\nJogador: " + r.Players[0].Name + " Vencedor da Partida\n\n"))
-				} else if player1Winner > player0Winner {
-					p.Conn.Write([]byte("\nJogador: " + r.Players[1].Name + " Vencedor da Partida\n\n"))
+			if len(r.Players[0].Cards) == 0 && len(r.Players[1].Cards) == 0 {
+				r.Broadcast(nil, "Jogo Finalizado!\n", true, false)
+				if r.PlayerWins[0] > r.PlayerWins[1] {
+					r.Broadcast(nil, "\nJogador: " + r.Players[0].Name + " Vencedor da Partida\n\n", true, false)
+				} else if r.PlayerWins[1] > r.PlayerWins[0] {
+					r.Broadcast(nil, "\nJogador: " + r.Players[1].Name + " Vencedor da Partida\n\n", true, false)
 				} else {
-					p.Conn.Write([]byte("\nPartida Empatada!\n\n"))
+					r.Broadcast(nil, "\nPartida Empatada!\n\n", true, false)
 				}
-				time.Sleep(10 * time.Second)
 			}
+
 			
 			
 			r.Players[0].SelectionRound = false
