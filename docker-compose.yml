@@ -11,3 +11,9 @@ services:
     build: ./client
     depends_on:
       - server
+
+  test:
+    build: ./test
+    depends_on:
+      - server
+      - client
