@@ -169,13 +169,14 @@ func Game(r *Room, p *Player, pm *PlayerManager, rm *RoomManager) {
 			chosenCard := p.Cards[choice]			
 			r.Broadcast(p, fmt.Sprintf("%s escolheu uma carta!\n", p.Name), false, true)
 
+			// Colocando a carta selecionada pelo usuario como as cartas da rodada
 			if r.Players[0].ID == p.ID {
 				r.Cards[0] = p.Cards[choice]
 			} else {
 				r.Cards[1] = p.Cards[choice]
 			}
 
-
+			// Mostrar a carta selecionada
 			for i := 0; i < 2; i++ {
 				if r.Players[i].ID == p.ID {
 					p.SelectionRound = true
@@ -183,30 +184,37 @@ func Game(r *Room, p *Player, pm *PlayerManager, rm *RoomManager) {
 				} 
 			} 
 
+			// Jogador esperando a jogada do outro jogador
 			for (!r.Players[0].SelectionRound && r.Players[1].SelectionRound) || (r.Players[0].SelectionRound && !r.Players[1].SelectionRound) {
 				p.Conn.Write([]byte("Aguardando a jogada do adversário... \n"))
 				time.Sleep(4 * time.Second)
 			} 
-			
+
+			// remove as cartas selecionadas
 			p.Cards = append(p.Cards[:choice], p.Cards[choice+1:]...)
 
-			if r.Cards[0].Damage > r.Cards[1].Damage {
-				r.PlayerWins[0]++
-				fmt.Println("0: ")
-				fmt.Println(r.Cards[0].Damage)
-				r.Broadcast(nil, "\nJogador: " + r.Players[0].Name + " Vencedor da Rodada\n\n", true, false)
-			} else if r.Cards[1].Damage > r.Cards[0].Damage {
-				fmt.Println("1: ")
-				fmt.Println(r.Cards[1].Damage)
-				r.PlayerWins[1]++
-				r.Broadcast(nil, "\nJogador: " + r.Players[1].Name + " Vencedor da Rodada\n\n", true, false)
-			} else {
-				r.Broadcast(nil, "Rodada Empatada!\n", true, false)
+			// Lógica para o Vencedor da Rodada
+			if r.Players[0].ID == p.ID {
+				// só o jogador 0 ("host") roda essa parte
+				if r.Cards[0].Damage > r.Cards[1].Damage {
+					r.PlayerWins[0]++
+					r.Broadcast(nil, "\nJogador: "+r.Players[0].Name+" Vencedor da Rodada\n\n", true, false)
+					fmt.Println("\nJogador: " + r.Players[0].Name + " Vencedor da Rodada\n\n")
+				} else if r.Cards[1].Damage > r.Cards[0].Damage {
+					r.PlayerWins[1]++
+					r.Broadcast(nil, "\nJogador: "+r.Players[1].Name+" Vencedor da Rodada\n\n", true, false)
+					fmt.Println("\nJogador: " + r.Players[1].Name + " Vencedor da Rodada\n\n")
+				} else {
+					r.Broadcast(nil, "Rodada Empatada!\n", true, false)
+					fmt.Printf("Rodada Empatada!\n")
+				}
 			}
+
 			
 			r.Players[0].SelectionRound = false
 			r.Players[1].SelectionRound = false
 
+			// Lógica para fim de jogo
 			if len(r.Players[0].Cards) == 0 && len(r.Players[1].Cards) == 0 {
 				break
 			}
@@ -214,13 +222,17 @@ func Game(r *Room, p *Player, pm *PlayerManager, rm *RoomManager) {
 		} 
 	}
 
+	// Lógica para Fim de Jogo
 	r.Broadcast(nil, "\nJogo Finalizado!\n", true, false)
 	if r.PlayerWins[0] > r.PlayerWins[1] {
 		r.Broadcast(nil, "\nJogador: " + r.Players[0].Name + " Vencedor da Partida\n\n", true, false)
+		fmt.Println("\nJogador: " + r.Players[0].Name + " Vencedor da Partida\n\n")
 	} else if r.PlayerWins[1] > r.PlayerWins[0] {
 		r.Broadcast(nil, "\nJogador: " + r.Players[1].Name + " Vencedor da Partida\n\n", true, false)
+		fmt.Println("\nJogador: " + r.Players[1].Name + " Vencedor da Partida\n\n")
 	} else {
 		r.Broadcast(nil, "\nPartida Empatada!\n\n", true, false)
+		fmt.Printf("\nPartida Empatada!\n\n")
 	}
 
 }
@@ -252,7 +264,7 @@ func (pm *PlayerManager) DrawCards(r *Room, p *Player, rm *RoomManager){
 func NewDeck() []Card {
     return []Card{
         // Sertanejo
-        {"Pablo", 100, "Lendário"},
+        {"Wesley Safadão", 100, "Lendário"},
         {"Gusttavo Lima", 95, "Lendário"},
         {"Ana Castela", 90, "Lendário"},
         {"Chitãozinho e Xororó", 85, "Épico"},
@@ -284,6 +296,17 @@ func NewDeck() []Card {
         {"Thiaguinho", 65, "Raro"},
         {"Molejo", 60, "Comum"},
         {"Pixote", 55, "Comum"},
+		// Samba & Pagode
+		{"Cartola", 100, "Lendário"},
+		{"Chico Buarque", 95, "Lendário"},
+		{"Tim Maia", 90, "Lendário"},
+		{"Clara Nunes", 85, "Épico"},
+		{"Martinho da Vila", 80, "Épico"},
+		{"Alcione", 75, "Raro"},
+		{"Jorge Aragão", 70, "Raro"},
+		{"Arlindo Cruz", 65, "Raro"},
+		{"Paulinho da Viola", 60, "Raro"},
+		{"Zeca Pagodinho", 55, "Raro"},
         
         // MPB
         {"Caetano Veloso", 100, "Lendário"},
@@ -295,6 +318,52 @@ func NewDeck() []Card {
         {"Lenine", 70, "Raro"},
         {"Seu Jorge", 65, "Raro"},
         {"Maria Rita", 60, "Raro"},
-        {"Tom Jobim", 110, "Lendário"},
+        {"Tom Jobim", 100, "Lendário"},
+
+		// Rock
+		{"Cazuza", 100, "Lendário"},
+		{"Renato Russo", 95, "Lendário"},
+		{"Rita Lee", 90, "Lendário"},
+		{"Raul Seixas", 85, "Épico"},
+		{"Chorão", 80, "Épico"},
+		{"Pitty", 75, "Épico"},
+		{"Marcelo D2", 70, "Raro"},
+		{"Frejat", 65, "Raro"},
+		{"Dinho Ouro Preto", 60, "Raro"},
+		{"Herbert Vianna", 55, "Raro"},
+		{"Paulo Ricardo", 50, "Comum"},
+		{"Supla", 45, "Comum"},
+		{"Tico Santa Cruz", 40, "Comum"},
+		{"Digão", 35, "Comum"},
+		{"Di Ferrero", 30, "Comum"},
+		{"Badauí", 25, "Comum"},
+		{"Rogério Flausino", 20, "Comum"},
+		{"Samuel Rosa", 15, "Comum"},
+		{"Lulu Santos", 10, "Comum"},
+		{"Tony Bellotto", 5, "Comum"},
+
+		// Forró
+		{"Luiz Gonzaga", 100, "Lendário"},
+		{"Dominguinhos", 95, "Lendário"},
+		{"Alceu Valença", 90, "Épico"},
+		{"Geraldo Azevedo", 85, "Épico"},
+		{"Flávio José", 80, "Raro"},
+		{"Elba Ramalho", 75, "Raro"},
+		{"Wesley Safadão", 70, "Comum"},
+		{"Solange Almeida", 65, "Comum"},
+		{"Mastruz com Leite", 60, "Comum"},
+		{"Calcinha Preta", 55, "Comum"},
+
+		// Axé
+		{"Ivete Sangalo", 100, "Lendário"},
+		{"Daniela Mercury", 95, "Lendário"},
+		{"Netinho", 90, "Épico"},
+		{"Bell Marques", 85, "Épico"},
+		{"Saulo Fernandes", 80, "Raro"},
+		{"Claudia Leitte", 75, "Raro"},
+		{"Durval Lelys", 70, "Raro"},
+		{"Timbalada", 65, "Comum"},
+		{"É O Tchan!", 60, "Comum"},
+		{"Banda Eva", 55, "Comum"},
     }
 }
