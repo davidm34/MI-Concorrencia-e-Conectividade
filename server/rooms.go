@@ -184,38 +184,40 @@ func Game(r *Room, p *Player, pm *PlayerManager, rm *RoomManager) {
 				} 
 			} 
 
+			
 			// Jogador esperando a jogada do outro jogador
+			r.mu.Lock()
 			for (!r.Players[0].SelectionRound && r.Players[1].SelectionRound) || (r.Players[0].SelectionRound && !r.Players[1].SelectionRound) {
 				p.Conn.Write([]byte("Aguardando a jogada do adversário... \n"))
 				time.Sleep(4 * time.Second)
-			} 
+			}
+			r.mu.Unlock()
 
 			// remove as cartas selecionadas
 			p.Cards = append(p.Cards[:choice], p.Cards[choice+1:]...)
 
+
 			// Lógica para o Vencedor da Rodada
-			if r.Players[0].ID == p.ID {
-				// só o jogador 0 ("host") roda essa parte
-				if r.Cards[0].Damage > r.Cards[1].Damage {
-					r.PlayerWins[0]++
-					r.Broadcast(nil, "\nJogador: "+r.Players[0].Name+" Vencedor da Rodada\n\n", true, false)
-					fmt.Println("\nJogador: " + r.Players[0].Name + " Vencedor da Rodada\n\n")
-				} else if r.Cards[1].Damage > r.Cards[0].Damage {
-					r.PlayerWins[1]++
-					r.Broadcast(nil, "\nJogador: "+r.Players[1].Name+" Vencedor da Rodada\n\n", true, false)
-					fmt.Println("\nJogador: " + r.Players[1].Name + " Vencedor da Rodada\n\n")
-				} else {
-					r.Broadcast(nil, "Rodada Empatada!\n", true, false)
-					fmt.Printf("Rodada Empatada!\n")
-				}
+			if r.Cards[0].Damage > r.Cards[1].Damage {
+				r.PlayerWins[0]++
+				p.Conn.Write([]byte("\nSala " + strconv.Itoa(r.ID) + ": " + r.Players[0].Name+" Vencedor da Rodada\n\n"))				
+				fmt.Println("\nSala " + strconv.Itoa(r.ID) + ": " + r.Players[0].Name+" Vencedor da Rodada\n\n")
+			} else if r.Cards[1].Damage > r.Cards[0].Damage {
+				r.PlayerWins[1]++				
+				p.Conn.Write([]byte("\nSala " + strconv.Itoa(r.ID) + ": " + r.Players[1].Name+" Vencedor da Rodada\n\n"))				
+				fmt.Println("\nSala " + strconv.Itoa(r.ID) + ": " + r.Players[0].Name+" Vencedor da Rodada\n\n")
+			} else {				
+				p.Conn.Write([]byte("\nSala " + strconv.Itoa(r.ID) + ": " +" Rodada Empatada\n\n"))			
+				fmt.Println("\nSala " + strconv.Itoa(r.ID) + ": " +" Rodada Empatada\n\n")
 			}
+			
 
 			
 			r.Players[0].SelectionRound = false
 			r.Players[1].SelectionRound = false
 
 			// Lógica para fim de jogo
-			if len(r.Players[0].Cards) == 0 && len(r.Players[1].Cards) == 0 {
+			if len(r.Players[0].Cards) == 0 || len(r.Players[1].Cards) == 0 {
 				break
 			}
 							
@@ -223,17 +225,18 @@ func Game(r *Room, p *Player, pm *PlayerManager, rm *RoomManager) {
 	}
 
 	// Lógica para Fim de Jogo
-	r.Broadcast(nil, "\nJogo Finalizado!\n", true, false)
+	p.Conn.Write([]byte("\nJogo Finalizado!\n\n"))
 	if r.PlayerWins[0] > r.PlayerWins[1] {
-		r.Broadcast(nil, "\nJogador: " + r.Players[0].Name + " Vencedor da Partida\n\n", true, false)
-		fmt.Println("\nJogador: " + r.Players[0].Name + " Vencedor da Partida\n\n")
+		p.Conn.Write([]byte("\nSala " + strconv.Itoa(r.ID) + ": " + r.Players[0].Name+" Vencedor da Partida\n\n"))
+		fmt.Println("\nSala " + strconv.Itoa(r.ID) + ": " + r.Players[0].Name+" Vencedor da Partida\n\n")
 	} else if r.PlayerWins[1] > r.PlayerWins[0] {
-		r.Broadcast(nil, "\nJogador: " + r.Players[1].Name + " Vencedor da Partida\n\n", true, false)
-		fmt.Println("\nJogador: " + r.Players[1].Name + " Vencedor da Partida\n\n")
+		p.Conn.Write([]byte("\nSala " + strconv.Itoa(r.ID) + ": " + r.Players[1].Name+" Vencedor da Partida\n\n"))
+		fmt.Println("\nSala " + strconv.Itoa(r.ID) + ": " + r.Players[1].Name+" Vencedor da Partida\n\n")
 	} else {
-		r.Broadcast(nil, "\nPartida Empatada!\n\n", true, false)
-		fmt.Printf("\nPartida Empatada!\n\n")
+		p.Conn.Write([]byte("\nSala " + strconv.Itoa(r.ID) + ": " +" Rodada Empatada\n\n"))			
+		fmt.Println("\nSala " + strconv.Itoa(r.ID) + ": " +" Rodada Empatada\n\n")
 	}
+
 
 }
 
