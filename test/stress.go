@@ -12,12 +12,15 @@ import (
 const (
 	serverAddrTCP = "server:8080"
 	serverAddrUDP = "server:8081"
-	numClients    = 50  // número de clientes simulados
-	numMessages   = 100 // número de mensagens que cada cliente envia
+	numClients    = 500 // número de clientes simulados
 )
 
-func tcpClient(id int, wg *sync.WaitGroup) {
-	defer wg.Done()
+var readyWG sync.WaitGroup
+var doneWG sync.WaitGroup
+var startCh = make(chan struct{})
+
+func tcpClient(id int, seletor int) {
+	defer doneWG.Done()
 
 	conn, err := net.Dial("tcp", serverAddrTCP)
 	if err != nil {
@@ -26,36 +29,48 @@ func tcpClient(id int, wg *sync.WaitGroup) {
 	}
 	defer conn.Close()
 
-	name := fmt.Sprintf("Jogador%d\n", id)
-	conn.Write([]byte(name))
-
 	reader := bufio.NewReader(conn)
 
-	// goroutine para ler mensagens do servidor
-	go func() {
+	// avisa que este cliente está pronto
+	readyWG.Done()
+
+	// aguarda sinal global para começar
+	<-startCh
+
+	if seletor == 1 || seletor == 2 {
+		// 1) Envia o nome
+		name := fmt.Sprintf("Jogador%d\n", id)
+		_, _ = conn.Write([]byte(name))
+
+		// Lógica do jogo: lê e responde
 		for {
+			// Lê a próxima mensagem do servidor
 			msg, err := reader.ReadString('\n')
 			if err != nil {
+				fmt.Printf("[Client %d] Conexão encerrada pelo servidor: %v\n", id, err)
 				return
 			}
-			_ = msg // não printa para não poluir
-		}
-	}()
 
-	// envia mensagens
-	for i := 0; i < numMessages; i++ {
-		msg := fmt.Sprintf("Mensagem %d do Cliente %d\n", i, id)
-		_, err := conn.Write([]byte(msg))
-		if err != nil {
-			fmt.Printf("[Client %d] Erro ao enviar: %v\n", id, err)
-			return
+			// Verifica se o servidor está pedindo uma jogada
+			if strings.Contains(msg, "Digite o número da carta que deseja jogar:") {
+				if seletor == 2 {
+					conn.Write([]byte("0\n"))
+				} else {
+					continue
+				}
+			} else if strings.Contains(msg, "Jogo Finalizado!") {
+				// Se o jogo terminou, o cliente pode se desconectar
+				return
+			}
 		}
-		time.Sleep(10 * time.Millisecond) // pequeno delay
+	} else {
+		return
 	}
+
 }
 
-func udpClient(id int, wg *sync.WaitGroup) {
-	defer wg.Done()
+func udpClient(id int) {
+	defer doneWG.Done()
 
 	conn, err := net.Dial("udp", serverAddrUDP)
 	if err != nil {
@@ -66,49 +81,62 @@ func udpClient(id int, wg *sync.WaitGroup) {
 
 	buffer := make([]byte, 1024)
 
-	for i := 0; i < numMessages; i++ {
-		message := fmt.Sprintf("Ping-%d from Client-%d", i, id)
+	// avisa que este cliente está pronto
+	readyWG.Done()
 
-		start := time.Now()
-		_, err := conn.Write([]byte(message))
-		if err != nil {
-			fmt.Printf("[Client %d] Erro ao enviar UDP: %v\n", id, err)
-			return
-		}
+	// aguarda sinal para começar
+	<-startCh
 
-		n, err := conn.Read(buffer)
-		if err != nil {
-			fmt.Printf("[Client %d] Erro ao ler resposta UDP: %v\n", id, err)
-			return
-		}
-		elapsed := time.Since(start)
+	message := fmt.Sprintf("Ping-from Client-%d", id)
 
-		if strings.TrimSpace(string(buffer[:n])) != message {
-			fmt.Printf("[Client %d] Erro: mensagem diferente recebida!\n", id)
-		}
-
-		fmt.Printf("[Client %d] RTT: %v\n", id, elapsed)
-		time.Sleep(50 * time.Millisecond)
+	start := time.Now()
+	_, err0 := conn.Write([]byte(message))
+	if err0 != nil {
+		fmt.Printf("[Client %d] Erro ao enviar UDP: %v\n", id, err0)
+		return
 	}
+
+	n, err := conn.Read(buffer)
+	if err != nil {
+		fmt.Printf("[Client %d] Erro ao ler resposta UDP: %v\n", id, err)
+		return
+	}
+	elapsed := time.Since(start)
+
+	if strings.TrimSpace(string(buffer[:n])) != message {
+		fmt.Printf("[Client %d] Erro: mensagem diferente recebida!\n", id)
+	}
+
+	fmt.Printf("[Client %d] RTT: %v\n", id, elapsed)
+
 }
 
 func main() {
-	var wg sync.WaitGroup
-
 	fmt.Println("Iniciando teste de stress...")
 
-	// dispara vários clientes TCP
+	readyWG.Add(numClients * 2)
+	doneWG.Add(numClients * 2)
+
+	// Seletor de teste
+	// 0 - Teste de Stress apenas fazendo requisição do cliente pro servidor,
+	// 1 - Teste de Stress em jogador em partida ,
+	// 2 - Teste de Stress em jogador em partida e jogando
+	seletor := 0
+
 	for i := 0; i < numClients; i++ {
-		wg.Add(1)
-		go tcpClient(i, &wg)
+		go tcpClient(i, seletor)
 	}
 
-	// dispara vários clientes UDP
 	for i := 0; i < numClients; i++ {
-		wg.Add(1)
-		go udpClient(i, &wg)
+		go udpClient(i)
 	}
 
-	wg.Wait()
+	readyWG.Wait()
+
+	fmt.Println("Todos os clientes conectados. Enviando mensagens simultaneamente...")
+
+	close(startCh)
+
+	doneWG.Wait()
 	fmt.Println("Teste de stress finalizado!")
 }
