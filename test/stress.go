@@ -12,14 +12,14 @@ import (
 const (
 	serverAddrTCP = "server:8080"
 	serverAddrUDP = "server:8081"
-	numClients    = 6 // número de clientes simulados
+	numClients    = 500 // número de clientes simulados
 )
 
 var readyWG sync.WaitGroup
 var doneWG sync.WaitGroup
 var startCh = make(chan struct{})
 
-func tcpClient(id int) {
+func tcpClient(id int, seletor int) {
 	defer doneWG.Done()
 
 	conn, err := net.Dial("tcp", serverAddrTCP)
@@ -37,27 +37,36 @@ func tcpClient(id int) {
 	// aguarda sinal global para começar
 	<-startCh
 
-	// 1) Envia o nome
-	name := fmt.Sprintf("Jogador%d\n", id)
-	_, _ = conn.Write([]byte(name))
+	if seletor == 1 || seletor == 2 {
+		// 1) Envia o nome
+		name := fmt.Sprintf("Jogador%d\n", id)
+		_, _ = conn.Write([]byte(name))
 
-	// Lógica do jogo: lê e responde
-	for {
-		// Lê a próxima mensagem do servidor
-		msg, err := reader.ReadString('\n')
-		if err != nil {
-			fmt.Printf("[Client %d] Conexão encerrada pelo servidor: %v\n", id, err)
-			return
-		}
+		// Lógica do jogo: lê e responde
+		for {
+			// Lê a próxima mensagem do servidor
+			msg, err := reader.ReadString('\n')
+			if err != nil {
+				fmt.Printf("[Client %d] Conexão encerrada pelo servidor: %v\n", id, err)
+				return
+			}
 
-		// Verifica se o servidor está pedindo uma jogada
-		if strings.Contains(msg, "Digite o número da carta que deseja jogar:") {
-			conn.Write([]byte("0\n"))
-		} else if strings.Contains(msg, "Jogo Finalizado!") {
-			// Se o jogo terminou, o cliente pode se desconectar
-			return
+			// Verifica se o servidor está pedindo uma jogada
+			if strings.Contains(msg, "Digite o número da carta que deseja jogar:") {
+				if seletor == 2 {
+					conn.Write([]byte("0\n"))
+				} else {
+					continue
+				}
+			} else if strings.Contains(msg, "Jogo Finalizado!") {
+				// Se o jogo terminou, o cliente pode se desconectar
+				return
+			}
 		}
+	} else {
+		return
 	}
+
 }
 
 func udpClient(id int) {
@@ -99,7 +108,7 @@ func udpClient(id int) {
 	}
 
 	fmt.Printf("[Client %d] RTT: %v\n", id, elapsed)
-	
+
 }
 
 func main() {
@@ -108,8 +117,14 @@ func main() {
 	readyWG.Add(numClients * 2)
 	doneWG.Add(numClients * 2)
 
+	// Seletor de teste
+	// 0 - Teste de Stress apenas fazendo requisição do cliente pro servidor,
+	// 1 - Teste de Stress em jogador em partida ,
+	// 2 - Teste de Stress em jogador em partida e jogando
+	seletor := 0
+
 	for i := 0; i < numClients; i++ {
-		go tcpClient(i)
+		go tcpClient(i, seletor)
 	}
 
 	for i := 0; i < numClients; i++ {
