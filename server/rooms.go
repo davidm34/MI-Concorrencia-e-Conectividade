@@ -135,7 +135,7 @@ func HandlePlayer(p *Player, room *Room, pm *PlayerManager, rm *RoomManager) {
 	}
 
 	p.Conn.Write([]byte("Bem-vindo ao servidor!\n"))
-	Game(room, p, pm, rm)
+	go Game(room, p, pm, rm)
 }
 
 
